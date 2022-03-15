@@ -18,55 +18,98 @@ void FirstChallenge::laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     laser_ = *msg;
 }
 
-void FirstChallenge::run()
+void FirstChallenge::run(float v, float r)
 {
 
-    if(old_position.x - odometry_pose.pose.position.x > 1.0){
-        cmd_vel_.mode = 11;
-        cmd_vel_.cntl.linear.x = 0.1;
-        cmd_vel_.cntl.angular.z = 0.7;
 
-        pub_cmd_vel_.publish(cmd_vel_);
-    }
+       cmd_vel_.mode = 11;
+       cmd_vel_.cntl.linear.x = v;
+       cmd_vel_.cntl.angular.z = r;
+
+       pub_cmd_vel_.publish(cmd_vel_);
+
 }
 
 void FirstChallenge::show_odom()
 {
     // ROS_INFO_STREAM("odom: x: %f, y: %f, z: %f", odometry_.pose.pose.position.x, odometry_.pose.pose.position.y, odometry_.pose.pose.position.z);
-    std::cout << "odom" << ": x:" << odometry_.pose.pose.position.x << " y:" <<  odometry_.pose.pose.position.y << " z:" <<  odometry_.pose.pose.position.z << std::endl;
+    std::cout << "odom" << ": x:" << odometry_.pose.pose.position.x << " y:" <<  odometry_.pose.pose.position.y << " z:" <<  odometry_.pose.pose.position.z << " theta:" << tf::getYaw(odometry_.pose.pose.orientation) <<std::endl;
 }
 
-void FirstChallenge::show_scan()
+float FirstChallenge::show_scan()
 {
     float range_min = 1e6;
-    for (int i = 0; i < laser_.ranges.size(); i++) {
+    int size_medium = laser_.ranges.size()/2;
+    int size_min = size_medium -20;
+    int size_max = size_medium +20;
+
+    for (int i = size_min; i < size_max; i++) {
         if (laser_.ranges[i] < range_min) {
             range_min = laser_.ranges[i];
         }
     }
     // ROS_INFO_STREAM("scan: min: %f", range_min);
     std::cout << "scan: min:" << range_min << std::endl;
+
+    return range_min;
 }
 
 void FirstChallenge::process()
 {
+
+    moved = false;
+    rotated = false;
+    init_flag = false;
+    stopped = false;
+
+    int t = 0;
+    float time = t*hz_;
+
     ros::Rate loop_rate(hz_);
     while(ros::ok())
     {
-        run();
-        show_odom();
-        show_scan();
+        if(moved != true){
+            run(0.10, 0.00);
+            ros::spinOnce();
+            loop_rate.sleep();
 
-        ros::spinOnce();
-        loop_rate.sleep();
+            if(odometry_.pose.pose.orientation.x > 1.0){
+                moved = true;
+            }
+        }                                                               //動き終わり
+        else if(moved == true && rotated != true ){
+            if(init_flag != true){
+                goal = tf::getYaw(odometry_.pose.pose.orientation);
+                init_flag = true;
+            }
+            else{
+                run(0.0, 0.10);
+                ros::spinOnce();
+                loop_rate.sleep();
+                t += 1;
+
+
+                if(fabs(goal - tf::getYaw(odometry_.pose.pose.orientation)) < 0.05 && time > 5){
+                        rotated = true;
+                }
+                                                                        //回転終わり
+            }
+        }
+        else if(moved == true && rotated == true && stopped != true){
+            run(0.10, 0.00);
+            ros::spinOnce();
+            loop_rate.sleep();
+
+            if(show_scan() < 0.50){
+                stopped = true;
+            }
+         }
+        else if(moved == true && rotated == true && stopped == true){
+            run(0.0, 0.0);
+        }
     }
 }
 
-void GetRPY(const geometry_msgs::Quaternion &q,double &roll,double &pitch,double &yaw)
-{
-  tf::Quaternion quat(q.x,q.y,q.z,q.w);
-  tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-}
 
 int main(int argc, char** argv)
 {
