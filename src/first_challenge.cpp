@@ -63,7 +63,7 @@ void FirstChallenge::process()
     stopped = false;
 
     int t = 0;
-    float time = t*hz_;
+    float time;
 
     ros::Rate loop_rate(hz_);
     while(ros::ok())
@@ -73,7 +73,7 @@ void FirstChallenge::process()
             ros::spinOnce();
             loop_rate.sleep();
 
-            if(odometry_.pose.pose.orientation.x > 1.0){
+            if(odometry_.pose.pose.position.x > 1.0){
                 moved = true;
             }
         }                                                               //動き終わり
@@ -87,9 +87,10 @@ void FirstChallenge::process()
                 ros::spinOnce();
                 loop_rate.sleep();
                 t += 1;
+                time =t/hz_;
 
 
-                if(fabs(goal - tf::getYaw(odometry_.pose.pose.orientation)) < 0.05 && time > 5){
+                if(fabs(goal - tf::getYaw(odometry_.pose.pose.orientation))< 0.05 &&  time > 5.0){
                         rotated = true;
                 }
                                                                         //回転終わり
